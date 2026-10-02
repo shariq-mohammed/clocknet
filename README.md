@@ -17,9 +17,6 @@ symbol_centroid.R: finds the geometric centroid of one dCDT clock component
 (i.e. column symbollabel in the data frame output by read_csk.R). Used in
 dcdt_to_adj_matrix.R.
 
-cf_source.R: determines which clock face to use for network construction in the
-event that a clock face is drawn twice. Used in dcdt_to_adj_matrix.R.
-
 dcdt_to_adj_matrix.R: converts the data frame of pen points output from
 read_csk.R into a network adjacency matrix, transforming pairwise Euclidean
 distances of clock components into edge weights. 
