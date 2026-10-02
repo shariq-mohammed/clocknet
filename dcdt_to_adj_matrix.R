@@ -42,45 +42,43 @@
 #   - spatstat (convexhull, ppp, owin, centroid.owin)
 #   - dplyr (group_by, summarize)
 #   - geometry (convex hull computations)
-#   - source files: cf_source.R, symbol_centroid.R
+#   - source files: symbol_centroid.R
 #
 # =====================================================================
 
 library(spatstat) 
-library(parallel)
 library(dplyr)
-library(geometry)
-
-source("/restricted/projectnb/dnpstats/adlinp/Project 2/Scripts/Paper GitHub/cf_source.R")
-source("/restricted/projectnb/dnpstats/adlinp/Project 2/Scripts/Paper GitHub/symbol_centroid.R")
-source("/restricted/projectnb/dnpstats/adlinp/Project 2/Scripts/Paper GitHub/read_csk.R")
 
 dcdt_to_adj_matrix <- function(dcdt_df, 
-                                condition  = c("COMMAND", "COPY"),
-                                scale = TRUE, return.dist.matrix = FALSE,
-                                kernel = c("exponential", "gaussian", "inverse", "linear"),
-                                lambda = 1,
-                                sigma = 0.5) {
+                               condition  = c("COMMAND", "COPY"),
+                               scale = TRUE, return.dist.matrix = FALSE,
+                               kernel = c("exponential", "gaussian", "inverse", "linear"),
+                               lambda = 1,
+                               sigma = 0.5) {
   
   if (is.null(dcdt_df) || nrow(dcdt_df) == 0) return(NULL)
+  
+  if (sigma <= 0) stop("sigma must be positive.")
+  if (lambda < 0) stop("lambda must be nonnegative.")
   
   condition <- match.arg(condition)
-  
   kernel <- match.arg(kernel)
   
-  dcdt_df <- dcdt_df[dcdt_df$drawing == condition, ]  
+  dcdt_df <- dcdt_df[dcdt_df$drawing == condition, ]
   
   if (is.null(dcdt_df) || nrow(dcdt_df) == 0) return(NULL)
   
-  source <- cf_source(dcdt_df)
+  dcdt_df$symbollabel <- droplevels(factor(dcdt_df$symbollabel))
+  dcdt_df$symboltype  <- droplevels(factor(dcdt_df$symboltype))
   
   # Get centroids for all relevant symbol labels except CF
   symbols <- c("ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", 
                "NINE", "TEN", "ELEVEN", "TWELVE", "HOUR_HAND", "MINUTE_HAND")
   
-  if (!any(levels(dcdt_df$symboltype) %in% symbols) & 
-      !any(levels(dcdt_df$symboltype) == "CLOCKFACE")) {
-    return(NULL)  
+  if (!any(levels(dcdt_df$symboltype) %in% symbols) &&
+      !any(levels(dcdt_df$symboltype) == "CLOCKFACE") &&
+      !any(levels(dcdt_df$symbollabel) == "CF")) {
+    return(NULL)
   }
   
   # Subset to just digits and hands
@@ -96,7 +94,7 @@ dcdt_to_adj_matrix <- function(dcdt_df,
   # Get data frame of centroid coordinates for each symbol label
   if (nrow(digits_dcdt_df) > 0) { 
     
-    unique_labels <- as.character(unique(droplevels(digits_dcdt_df$symbollabel)))
+    unique_labels <- as.character(unique(digits_dcdt_df$symbollabel))
     
     for (i in seq_along(unique_labels)) {
       
@@ -111,12 +109,12 @@ dcdt_to_adj_matrix <- function(dcdt_df,
   
   # Get centroid coordinates all 5 CF elements (center, Q1-Q4)
   # Append to the results of the other clock symbols
-  if (source %in% c("CF", "CF'")) {
+  if ("CF" %in% as.character(dcdt_df$symbollabel)) {
     
-    cf <- dcdt_df[dcdt_df$symbollabel == source, ]
+    cf <- dcdt_df[as.character(dcdt_df$symbollabel) == "CF", , drop = FALSE]
     digit_cf_centroids <- rbind(digit_centroids, symbol_centroid(cf,
-                                                              symbollabel = source,
-                                                              scale = scale))
+                                                                 symbollabel = "CF",
+                                                                 scale = scale))
   } else { # If no "CF", return the center coordinates of the entire drawing
     
     if (scale) {
@@ -136,16 +134,16 @@ dcdt_to_adj_matrix <- function(dcdt_df,
     centroid <- centroid.owin(ch)
     
     digit_cf_centroids <- rbind(digit_centroids, data.frame(symbollabel = "CF_CENTER",
-                                                         symboltype = "CLOCKFACE_CENTER",
-                                                         centroid_x = centroid$x,
-                                                         centroid_y = centroid$y))
+                                                            symboltype = "CLOCKFACE_CENTER",
+                                                            centroid_x = centroid$x,
+                                                            centroid_y = centroid$y))
   }
   
   # Make sure the symboltype is a factor with 19 levels
   digit_cf_centroids$symboltype <- factor(digit_cf_centroids$symboltype,
-                                       levels = c(symbols, "CLOCKFACE_Q1", "CLOCKFACE_Q2",
-                                                  "CLOCKFACE_Q3", "CLOCKFACE_Q4", 
-                                                  "CLOCKFACE_CENTER"))
+                                          levels = c(symbols, "CLOCKFACE_Q1", "CLOCKFACE_Q2",
+                                                     "CLOCKFACE_Q3", "CLOCKFACE_Q4", 
+                                                     "CLOCKFACE_CENTER"))
   
   digit_cf_centroids$centroid_x <- as.numeric(digit_cf_centroids$centroid_x)
   digit_cf_centroids$centroid_y <- as.numeric(digit_cf_centroids$centroid_y)
@@ -197,7 +195,7 @@ dcdt_to_adj_matrix <- function(dcdt_df,
       # Max possible distance is sqrt(2) in a 1x1 square
       out_mat <- sqrt(2) - dist_mat
     } else {
-
+      
       x_range <- max(dcdt_df$x, na.rm = TRUE) - min(dcdt_df$x, na.rm = TRUE)
       y_range <- max(dcdt_df$y, na.rm = TRUE) - min(dcdt_df$y, na.rm = TRUE)
       max_dist <- sqrt(x_range^2 + y_range^2)
